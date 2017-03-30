@@ -1,4 +1,5 @@
 open Compile
+open Optimize
 open Runner
 open Printf
 open OUnit2
