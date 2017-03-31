@@ -81,27 +81,51 @@ let peephole ls =
     opt (strip ls)
 
 let purity_env (prog : tag aprogram) : (string, bool) Hashtbl.t =
-  let ans : (string, bool) Hashtbl.t = Hashtbl.create 0 in
-  let rec helpA (aexp : tag aexpr) : bool =
-      failwith "Implement this"
-    (* is the given expression pure or not?
-       Also, update ans with any bindings you encounter. *)
-  and helpC (cexp : tag cexpr) : bool =
-      failwith "Implement this"
+  let hash : (string, bool) Hashtbl.t = Hashtbl.create 0 in
+      (* is the given expression pure or not?
+      Also, update ans with any bindings you encounter. *)
+  let rec helpA ae =
+      match ae with
+      | ALet(name, ce, ae, _) ->
+          Hashtbl.add hash name (helpC ce);
+          helpA ae
+      | ASeq(ce, rest, _) ->
+          helpC ce && helpA rest
+      | ACExpr ce -> helpC ce
+      | _ -> failwith "Implement this"
+  and helpC ce =
+      match ce with
+      | CIf(con, thn, els, _) ->
+          helpI con && helpA thn && helpA els
+      | CPrim1(_, e, _) ->
+          helpI e
+      | CPrim2(_, e1, e2, _) ->
+          helpI e2 && helpI e2
+      | CApp(func, args, _) ->
+          helpI func && List.for_all helpI args
+      | CTuple(ls, _) ->
+          List.for_all helpI ls
+      | CGetItem(tup, idx, _) ->
+          helpI tup && helpI idx
+      | CSetItem(tup, idx, value, _) ->
+          Hashtbl.replace hash (nameof tup) false;
+          false; (*?*)
+      | CLambda(args, body, _) ->
+          List.iter (fun x -> Hashtbl.add hash x true) args;
+          let ans = helpA body in
+          List.iter (fun x -> Hashtbl.remove hash x) args;
+          ans
+      | CImmExpr e -> helpI e
   and helpI (imm : tag immexpr) : bool =
-      failwith "Implement this"
-  in
-  ignore(helpA prog);
-  ans
-
-
-type simple_expr =
-  | Id of string
-  | Num of int
-  | Bool of bool
-  | Prim1 of prim1 * simple_expr
-  | Prim2 of prim2 * simple_expr * simple_expr
-  | App of simple_expr * simple_expr list
+      match imm with
+      | ImmNum _ -> true
+      | ImmBool _ -> true
+      | ImmId(x, _) -> Hashtbl.find hash x
+  and nameof imm =
+      match imm with
+      | ImmId(x, _) -> x
+      | _ -> failwith "Impossible"
+  in ignore(helpA prog); hash
 
 let rec string_of_simple s =
   match s with
@@ -141,9 +165,94 @@ let cexpr_to_simple_opt cexp =
   | _ -> None
 ;;
 
-let const_fold (prog : tag aprogram) : unit aprogram =
-      failwith "Implement this"
+let rec untagA ae =
+    match ae with
+    | ALet(name, ce, ae, _) -> ALet(name, untagC ce, untagA ae, ())
+    | ALetRec(ls, ae, _) -> ALetRec(List.map (fun (name, ce) -> (name, untagC ce)) ls, untagA ae, ())
+    | ASeq(ce, rest, _) -> ASeq(untagC ce, untagA rest, ())
+    | ACExpr ce -> ACExpr(untagC ce)
+and untagC ce =
+    match ce with
+    | CPrim1(op, e, _) -> CPrim1(op, untagI e, ())
+    | CPrim2(op, e1, e2, _) -> CPrim2(op, untagI e1, untagI e2, ())
+    | CIf(cond, thn, els, _) -> CIf(untagI cond, untagA thn, untagA els, ())
+    | CTuple(vals, _) -> CTuple(List.map untagI vals, ())
+    | CGetItem(tup, idx, _) -> CGetItem(untagI tup, untagI idx, ())
+    | CSetItem(tup, idx, rhs, _) -> CSetItem(untagI tup, untagI idx, untagI rhs, ())
+    | CApp(name, args, _) -> CApp(untagI name, List.map untagI args, ())
+    | CLambda(args, body, _) -> CLambda(args, untagA body, ())
+    | CImmExpr i -> CImmExpr (untagI i)
+and untagI ie =
+    match ie with
+    | ImmId(x, _) -> ImmId(x, ())
+    | ImmNum(n, _) -> ImmNum(n, ())
+    | ImmBool(b, _) -> ImmBool(b, ())
 
+let const_fold (prog : tag aprogram) : (unit aprogram) =
+    let try_add name ce ls =
+        match ce with
+        | CImmExpr imm -> (name,imm)::ls
+        | _ -> ls in
+    let get_num imm =
+        match imm with
+        | ImmNum(x, _) -> x
+        | _ -> failwith "Impossible: get_num" in
+    let get_bool imm =
+        match imm with
+        | ImmBool(x, _) -> x
+        | _ -> failwith "Impossible: get_bool" in
+    let is_num imm =
+        match imm with
+        | ImmNum _ -> true
+        | ImmBool _ -> false
+        | _ -> failwith "Impossible: is_num" in
+    let rec helpA e env : unit aexpr =
+        match e with
+        | ALet(name, ce, ae, _) ->
+            let ans = helpC ce env in
+            let new_env = try_add name ans env in
+            ALet(name, ans, helpA ae new_env, ())
+        | ALetRec(ls, ae, _) ->
+            ALetRec(List.map (fun (name, ce) -> (name, helpC ce env)) ls, helpA ae env, ())
+        | ASeq(ce, rest, _) ->
+            ASeq(helpC ce env, helpA rest env, ())
+        | ACExpr ce ->
+            ACExpr(helpC ce env)
+    and helpC ce env : unit cexpr =
+        match ce with
+        | CIf(con, thn, els, _) ->
+            CIf(con, helpA thn env, helpA els env, ())
+        | CPrim1(op, e, _) ->
+            (try (match e with
+            | ImmId(name, _) -> helpC (CPrim1(op, List.assoc name env, ())) env
+            | _ -> (match op with
+                | Add1 -> CImmExpr(ImmNum(((get_num e) + 1), ()))
+                | Sub1 -> CImmExpr(ImmNum(((get_num e) - 1), ()))
+                | Not -> CImmExpr(ImmBool(not(get_bool e), ()))
+                | IsNum -> CImmExpr(ImmBool(is_num e, ()))
+                | IsBool -> CImmExpr(ImmBool(not(is_num e), ()))
+                | _ -> ce)) with
+            | _ -> ce)
+        | CPrim2(op, e1, e2, _) ->
+            (try (match e1, e2 with
+            | ImmId(name, _), _ -> helpC (CPrim2(op, List.assoc name env, e2, ())) env
+            | _, ImmId(name, _) -> helpC (CPrim2(op, e1, List.assoc name env, ())) env
+            | _ -> (match op with
+                | Plus -> CImmExpr(ImmNum((get_num e1) + (get_num e2), ()))
+                | Minus -> CImmExpr(ImmNum((get_num e1) - (get_num e2), ()))
+                | Times -> CImmExpr(ImmNum((get_num e1) * (get_num e2), ()))
+                | Less -> CImmExpr(ImmBool((get_num e1) < (get_num e2), ()))
+                | Greater -> CImmExpr(ImmBool((get_num e1) > (get_num e2), ()))
+                | LessEq -> CImmExpr(ImmBool((get_num e1) <= (get_num e2), ()))
+                | GreaterEq -> CImmExpr(ImmBool((get_num e1) >= (get_num e2), ()))
+                | Eq -> CImmExpr(ImmBool((get_num e1) = (get_num e2), ()))
+                | And -> CImmExpr(ImmBool((get_bool e1) && (get_bool e2), ()))
+                | Or -> CImmExpr(ImmBool((get_bool e1) || (get_bool e2), ())))) with
+            | _ -> ce)
+        | CLambda(args, body, _) ->
+            CLambda(args, helpA body env, ())
+        | _ -> ce in
+    helpA (untagA prog) []
 
 let cse (prog : tag aprogram) : unit aprogram =
   let purity = purity_env prog in
@@ -160,13 +269,14 @@ let dae (prog : tag aprogram) : unit aprogram =
       failwith "Implement this"
 
 let optimize (prog : tag aprogram) (verbose : bool) : tag aprogram =
-  let const_prog = atag (const_fold prog) in
-  let cse_prog = atag (cse const_prog) in
-  let dae_prog = atag (dae cse_prog) in
+  atag (const_fold prog)
+  (*let const_prog = atag (const_fold prog) in*)
+  (*let cse_prog = atag (cse const_prog) in*)
+  (*let dae_prog = atag (dae cse_prog) in*)
   (*(if verbose then begin*)
        (*printf "Const/tagged:\n%s\n" (string_of_aprogram const_prog ~-1);*)
        (*printf "CSE/tagged:\n%s\n" (string_of_aprogram cse_prog ~-1);*)
        (*printf "DAE/tagged:\n%s\n" (string_of_aprogram (atag dae_prog) ~-1)*)
      (*end*)
    (*else ());*)
-  dae_prog
+  (*dae_prog*)

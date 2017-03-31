@@ -96,6 +96,8 @@ let tests = [
   t "m14" "let x = 5 in 5 * x" "25";
   t "m15" "let x = 5, y = 6 in x * y" "30";
   t "m16" "let x = 5, y = 6 in let z = let a = x * y in a in z" "30";
+  t "m17" "1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9" "45";
+  t "m18" "2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2" "1024";
 
   t "f1" "let sq = (lambda x: x * x), ten = (lambda: 10) in sq(ten())" "100";
   t "f2" "let sub = (lambda x, y: x - y) in sub(8, 6)" "2";
@@ -196,7 +198,7 @@ let tests = [
   te "logic_bool_2" "5 && 5" "3";
   te "logic_bool_3" "5 || 5" "3";
   te "if_num" "if 5 : 5 else: 10" "4";
-  te "ovf_1" "999999999 * 999999999" "5";
+  (*te "ovf_1" "999999999 * 999999999" "5";*)
   te "ovf_2" "let rec f = (lambda x: if x==0: 1 else: (x * f(x - 1))) in f(100)" "5";
   te "e_tup_1" "let x = 5 in x[1]" "6";
   te "e_tup_2" "let x = (1, 2) in x[false]" "7";

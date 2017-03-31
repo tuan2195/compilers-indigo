@@ -88,4 +88,12 @@ and 'a aexpr = (* anf expressions *)
   | ASeq of 'a cexpr * 'a aexpr * 'a
   | ACExpr of 'a cexpr
 
+type simple_expr =
+  | Id of string
+  | Num of int
+  | Bool of bool
+  | Prim1 of prim1 * simple_expr
+  | Prim2 of prim2 * simple_expr * simple_expr
+  | App of simple_expr * simple_expr list
+
 and 'a aprogram = 'a aexpr

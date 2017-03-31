@@ -40,18 +40,16 @@ and is_imm e =
   | _ -> false
 ;;
 
-let builtin_types = ["int"; "bool"]
-
-(* FINISH THIS FUNCTION WITH THE WELL-FORMEDNESS FROM FER-DE-LANCE *)
 let well_formed (p : (Lexing.position * Lexing.position) program) builtins : exn list =
-  let rec wf_E e (env : sourcespan envt) =
-    let rec dupe x binds =
-        match binds with
-        | [] -> None
-        | (y, _, _, pos)::_ when x = y -> Some pos
-        | _::rest -> dupe x rest in
+    let rec wf_E e (env : sourcespan envt) =
+        let rec dupe x binds =
+            match binds with
+            | [] -> None
+            | (y, _, _, pos)::_ when x = y -> Some pos
+            | _::rest -> dupe x rest in
     let wf_S scheme pos =
         let rec wf_T typ env pos =
+            let builtin_types = ["int"; "bool"] in
             match typ with
             | TyCon(name) ->
                 if List.mem name builtin_types then [] else [UnboundId(name, pos)]
@@ -748,9 +746,10 @@ let compile_to_string prog : (exn list, string) either =
   | [] ->
      let tagged : tag program = tag prog in
      let anfed : tag aprogram = atag (anf tagged) in
+     let optimized = optimize anfed false in
      (* printf "Prog:\n%s\n" (ast_of_prog prog); *)
      (* printf "Tagged:\n%s\n" (format_prog tagged string_of_int); *)
      (* printf "ANFed/tagged:\n%s\n" (string_of_aprogram anfed); *)
-     Right(compile_prog anfed)
+     Right(compile_prog optimized)
   | _ -> Left(errors)
 
