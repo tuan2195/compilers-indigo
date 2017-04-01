@@ -179,7 +179,7 @@ and untagC ce =
     | CTuple(vals, _) -> CTuple(List.map untagI vals, ())
     | CGetItem(tup, idx, _) -> CGetItem(untagI tup, untagI idx, ())
     | CSetItem(tup, idx, rhs, _) -> CSetItem(untagI tup, untagI idx, untagI rhs, ())
-    | CApp(name, args, _) -> CApp(untagI name, List.map untagI args, ())
+    | CApp(func, args, _) -> CApp(untagI func, List.map untagI args, ())
     | CLambda(args, body, _) -> CLambda(args, untagA body, ())
     | CImmExpr i -> CImmExpr (untagI i)
 and untagI ie =
@@ -189,25 +189,20 @@ and untagI ie =
     | ImmBool(b, _) -> ImmBool(b, ())
 
 let const_fold (prog : tag aprogram) : (unit aprogram) =
-    let try_add name ce ls =
-        match ce with
+    let try_add name ce ls = match ce with
         | CImmExpr imm -> (name,imm)::ls
         | _ -> ls in
-    let get_num imm =
-        match imm with
+    let get_num imm = match imm with
         | ImmNum(x, _) -> x
         | _ -> failwith "Impossible: get_num" in
-    let get_bool imm =
-        match imm with
+    let get_bool imm = match imm with
         | ImmBool(x, _) -> x
         | _ -> failwith "Impossible: get_bool" in
-    let is_num imm =
-        match imm with
+    let is_num imm = match imm with
         | ImmNum _ -> true
         | ImmBool _ -> false
         | _ -> failwith "Impossible: is_num" in
-    let rec helpA e env : unit aexpr =
-        match e with
+    let rec helpA ae env = match ae with
         | ALet(name, ce, ae, _) ->
             let ans = helpC ce env in
             let new_env = try_add name ans env in
@@ -218,8 +213,7 @@ let const_fold (prog : tag aprogram) : (unit aprogram) =
             ASeq(helpC ce env, helpA rest env, ())
         | ACExpr ce ->
             ACExpr(helpC ce env)
-    and helpC ce env : unit cexpr =
-        match ce with
+    and helpC ce env = match ce with
         | CIf(con, thn, els, _) ->
             CIf(con, helpA thn env, helpA els env, ())
         | CPrim1(op, e, _) ->
@@ -265,18 +259,74 @@ let cse (prog : tag aprogram) : unit aprogram =
       failwith "Implement this"
 
 let dae (prog : tag aprogram) : unit aprogram =
-  let purity = purity_env prog in
-      failwith "Implement this"
+    (*let purity = purity_env prog in*)
+    let rec helpA e =
+        match e with
+        | ALet(name, ce, ae, _) ->
+            (* TODO: Interaction with purity *)
+            let (new_ae, used_ls) = helpA ae in
+            if List.mem name used_ls then
+                let (new_ce, used_ce) = helpC ce in
+                (ALet(name, new_ce, new_ae, ()), used_ce @ used_ls)
+            else
+                (*let _ = printf "dead var: %s\n" name in*)
+                (new_ae, used_ls)
+        | ALetRec(ls, ae, _) ->
+            (* TODO: Eliminate dead mutually-recursive functions *)
+            let (new_ae, used_ae) = helpA ae in
+            let used_ls = List.flatten (List.map (fun x -> snd (helpC (snd x))) ls) in
+            let cleanup = List.flatten (List.map
+                (fun x -> if List.mem (fst x) (used_ae @ used_ls) then [x] else [] ) ls) in
+            let new_temp = List.map (fun (f, b) -> let (n, ls) = helpC b in ((f, n), ls)) cleanup in
+            let new_ls = List.map fst new_temp in
+            let used_new = List.flatten (List.map snd new_temp) in
+            (ALetRec(new_ls, new_ae, ()), used_ae @ used_new)
+        | ASeq(ce, rest, _) ->
+            let (new_ce, used_ce) = helpC ce in
+            let (new_rest, used_rest) = helpA rest in
+            (ASeq(new_ce, new_rest, ()), used_ce @ used_rest)
+        | ACExpr ce ->
+            let (new_ce, used_ce) = helpC ce in
+            (ACExpr(new_ce), used_ce)
+     and helpC ce =
+        match ce with
+        | CPrim1(op, e, _) ->
+            (untagC ce, helpI e)
+        | CPrim2(op, e1, e2, _) ->
+            (untagC ce, helpI e1 @ helpI e2)
+        | CIf(cond, thn, els, _) ->
+            let (new_thn, used_thn) = helpA thn in
+            let (new_els, used_els) = helpA els in
+            (CIf(untagI cond, new_thn, new_els, ()), helpI cond @ used_thn @ used_els)
+        | CTuple(vals, _) ->
+            (untagC ce, List.flatten (List.map helpI vals))
+        | CGetItem(tup, idx, _) ->
+            (untagC ce, helpI tup @ helpI idx)
+        | CSetItem(tup, idx, rhs, _) ->
+            (untagC ce, helpI tup @ helpI idx @ helpI rhs)
+        | CApp(name, args, _) ->
+            (untagC ce, helpI name @ (List.flatten (List.map helpI args)))
+        | CLambda(ls, body, _) ->
+            let (new_body, used_body) = helpA body in
+            (CLambda(ls, new_body, ()), used_body)
+        | CImmExpr i ->
+            (untagC ce, helpI i)
+    and helpI i =
+        match i with
+        | ImmId(x, _) -> [x]
+        | _ -> [] in
+    fst (helpA prog)
 
 let optimize (prog : tag aprogram) (verbose : bool) : tag aprogram =
-  atag (const_fold prog)
-  (*let const_prog = atag (const_fold prog) in*)
+    (*let const atag (const_fold prog)*)
+  let const_prog = atag (const_fold prog) in
   (*let cse_prog = atag (cse const_prog) in*)
-  (*let dae_prog = atag (dae cse_prog) in*)
-  (*(if verbose then begin*)
-       (*printf "Const/tagged:\n%s\n" (string_of_aprogram const_prog ~-1);*)
+  let cse_prog = const_prog in
+  let dae_prog = atag (dae cse_prog) in
+  (if verbose then begin
+      printf "Const/tagged:\n%s\n" (string_of_aprogram const_prog);
        (*printf "CSE/tagged:\n%s\n" (string_of_aprogram cse_prog ~-1);*)
-       (*printf "DAE/tagged:\n%s\n" (string_of_aprogram (atag dae_prog) ~-1)*)
-     (*end*)
-   (*else ());*)
-  (*dae_prog*)
+       printf "DAE/tagged:\n%s\n" (string_of_aprogram (atag dae_prog));
+     end
+   else ());
+  dae_prog

@@ -151,6 +151,19 @@ let tests = [
             reverse((0, (1, (2, (3, (4, (5, (6, (7, (8, (9, false)))))))))))"
             "(9, (8, (7, (6, (5, (4, (3, (2, (1, (0, false))))))))))";
 
+  t "opt1" "let f = (lambda x,y,z,t: x*y+z*t),
+            g = (lambda x,y: x+y),
+            h = (lambda x,y: 2*x+y),
+            j = (lambda x: x*x) in
+            12" "12";
+  t "opt2" "let rec f = (lambda x,y,z,t: x*y+z*t),
+                    g = (lambda x,y: x+y),
+                    h = (lambda x,y: 2*x+y),
+                    j = (lambda x: x*x) in
+                    12" "12";
+  t "opt3" "let rec f = (lambda x: f(x)) in
+                    12" "12";
+
   te "e_lam_1" "let x = 10 in let f = (lambda y: x + y) in x(10)" "10";
   te "e_lam_2" "let x = 10 in let f = (lambda y: x + y) in f(10, 10)" "11";
   t "tup_1" "let x = (3, 4, 5, 6) in x[0]" "3";
@@ -218,12 +231,20 @@ let tests = [
 ]
 
 let dut = [
-  t "rec1" "let rec f = (lambda x: if x==0: 1 else: (x * f(x - 1))),
-                    g = (lambda x: x + x) in f(g(3))" "720";
+  t "opt1" "let f = (lambda x,y,z,t: x*y+z*t),
+            g = (lambda x,y: x+y),
+            h = (lambda x,y: 2*x+y),
+            j = (lambda x: x*x) in
+            12" "12";
+  t "opt2" "let rec f = (lambda x,y,z,t: x*y+z*t),
+                    g = (lambda x,y: x+y),
+                    h = (lambda x,y: 2*x+y),
+                    j = (lambda x: x*x) in
+                    12" "12";
 ]
 let suite =
-"suite">::: pair_tests @ oom @ gc @ tests
-(*"suite">::: dut*)
+(*"suite">::: pair_tests @ oom @ gc @ tests*)
+"suite">::: dut
 
 
 

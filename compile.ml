@@ -431,6 +431,7 @@ let rec compile_fun fun_name env e offset =
 and compile_aexpr e si env num_args use_gc =
     match e with
     | ALetRec(expr_ls, body, _) ->
+        if expr_ls = [] then compile_aexpr body si env num_args true else
         let new_env = env @ (List.mapi
             (fun i x -> (fst x, RegOffset(word_size*(~-(si+i)), EBP)))
             expr_ls) in
@@ -747,6 +748,7 @@ let compile_to_string prog : (exn list, string) either =
      let tagged : tag program = tag prog in
      let anfed : tag aprogram = atag (anf tagged) in
      let optimized = optimize anfed false in
+     (*let optimized = optimize anfed true in*)
      (* printf "Prog:\n%s\n" (ast_of_prog prog); *)
      (* printf "Tagged:\n%s\n" (format_prog tagged string_of_int); *)
      (* printf "ANFed/tagged:\n%s\n" (string_of_aprogram anfed); *)
