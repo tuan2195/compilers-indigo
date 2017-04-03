@@ -203,7 +203,8 @@ let const_fold (prog : tag aprogram) : (unit aprogram) =
         | ImmNum _ -> true
         | ImmBool _ -> false
         | _ -> failwith "Impossible: is_num" in
-    let rec helpA ae env = match ae with
+    let rec helpA ae env =
+        match ae with
         | ALet(name, ce, ae, _) ->
             let ans = helpC ce env in
             ALet(name, ans, helpA ae (try_add name ans env), ())
@@ -213,7 +214,8 @@ let const_fold (prog : tag aprogram) : (unit aprogram) =
             ASeq(helpC ce env, helpA rest env, ())
         | ACExpr ce ->
             ACExpr(helpC ce env)
-    and helpC ce env = match ce with
+    and helpC ce env =
+        match ce with
         | CPrim1(op, e, _) ->
             (try (match e with
                 | ImmId(name, _) ->
@@ -243,16 +245,25 @@ let const_fold (prog : tag aprogram) : (unit aprogram) =
                     | And -> CImmExpr(ImmBool((get_bool e1) && (get_bool e2), ()))
                     | Or -> CImmExpr(ImmBool((get_bool e1) || (get_bool e2), ())))) with
             | _ -> ce)
-        | CImmExpr i ->
-            (match i with
-            | ImmId(name, _) when List.mem_assoc name env ->
-                CImmExpr(List.assoc name env)
-            | _ -> ce)
         | CIf(con, thn, els, _) ->
-            CIf(con, helpA thn env, helpA els env, ())
+            CIf(helpI con env, helpA thn env, helpA els env, ())
+        | CApp(func, args, _) ->
+            CApp(helpI func env, List.map (fun x -> helpI x env) args, ())
+        | CTuple(ls, _) ->
+            CTuple(List.map (fun x -> helpI x env) ls, ())
+        | CGetItem(tup, idx, _) ->
+            CGetItem(helpI tup env, helpI idx env, ())
+        | CSetItem(tup, idx, rhs, _) ->
+            CSetItem(helpI tup env, helpI idx env, helpI rhs env, ())
         | CLambda(args, body, _) ->
             CLambda(args, helpA body env, ())
-        | _ -> ce in
+        | CImmExpr i ->
+            CImmExpr(helpI i env)
+    and helpI ie env =
+        match ie with
+        | ImmId(name, _) when List.mem_assoc name env ->
+            List.assoc name env
+        | _ -> ie in
     helpA (untagA prog) []
 
 let cse (prog : tag aprogram) : unit aprogram =
@@ -309,6 +320,7 @@ let cse (prog : tag aprogram) : unit aprogram =
                     else untagC e
                 | _ -> failwith "Impossible case"))
         | CTuple _ | CGetItem _ | CSetItem _ ->
+            (* TODO: Add more sophisticated optimization? *)
             untagC e
         | CIf(cond, thn, els, _) ->
             CIf(untagI cond, helpA thn eql, helpA els eql, ())
