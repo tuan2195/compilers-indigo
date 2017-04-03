@@ -394,4 +394,6 @@ let optimize prog =
         (*printf "DAE/tagged:\n%s\n" (string_of_aprogram dae_prog);*)
         (*printf "CSE/tagged:\n%s\n" (string_of_aprogram cse_prog);*)
         cse_prog in
-    pass(pass(pass(prog)))
+    let opt = pass(pass(pass(prog))) in
+    (*printf "Prog:\n%s\n" (string_of_aprogram opt);*)
+    opt;
