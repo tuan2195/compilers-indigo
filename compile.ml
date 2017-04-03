@@ -747,7 +747,7 @@ let compile_to_string prog : (exn list, string) either =
   | [] ->
      let tagged : tag program = tag prog in
      let anfed : tag aprogram = atag (anf tagged) in
-     let optimized = optimize anfed false in
+     let optimized = optimize anfed in
      (*let optimized = optimize anfed true in*)
      (* printf "Prog:\n%s\n" (ast_of_prog prog); *)
      (* printf "Tagged:\n%s\n" (format_prog tagged string_of_int); *)

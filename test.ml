@@ -231,20 +231,27 @@ let tests = [
 ]
 
 let dut = [
-  t "opt1" "let f = (lambda x,y,z,t: x*y+z*t),
-            g = (lambda x,y: x+y),
-            h = (lambda x,y: 2*x+y),
-            j = (lambda x: x*x) in
-            12" "12";
-  t "opt2" "let rec f = (lambda x,y,z,t: x*y+z*t),
-                    g = (lambda x,y: x+y),
-                    h = (lambda x,y: 2*x+y),
-                    j = (lambda x: x*x) in
-                    12" "12";
+  (*t "opt1" "let f = (lambda x,y,z,t: x*y+z*t),*)
+            (*g = (lambda x,y: x+y),*)
+            (*h = (lambda x,y: 2*x+y),*)
+            (*j = (lambda x: x*x) in*)
+            (*12" "12";*)
+  (*t "opt2" "let rec f = (lambda x,y,z,t: x*y+z*t),*)
+                    (*g = (lambda x,y: x+y),*)
+                    (*h = (lambda x,y: 2*x+y),*)
+                    (*j = (lambda x: x*x) in*)
+                    (*12" "12";*)
+  (*t "rec4" "let rec f = (lambda x, a: if x==1: a else: g(x - 1, a * x)),*)
+            (*g = (lambda x, a: if x==1: a+1 else: f(x - 1, a + x)) in f(16, 1)" "20643839";*)
+  (*t "ll_1" "let rec length = (lambda l: length_rec(l, 0)),*)
+            (*length_rec = (lambda l, acc: if l == false: acc else: length_rec(l[1], acc + 1)) in*)
+            (*length((0, (1, (2, (3, (4, (5, (6, (7, (8, (9, false)))))))))))"*)
+            (*"10";*)
+  te "ovf_1" "999999999 * 999999999" "5";
 ]
 let suite =
-(*"suite">::: pair_tests @ oom @ gc @ tests*)
-"suite">::: dut
+"suite">::: pair_tests @ oom @ gc @ tests
+(*"suite">::: dut*)
 
 
 
